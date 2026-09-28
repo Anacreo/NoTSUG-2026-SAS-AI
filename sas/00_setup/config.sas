@@ -22,7 +22,9 @@
    3) Manual fallback path (edit as needed)
 */
 %let __exec_path = %sysfunc(dequote(%superq(_SASPROGRAMFILE)));
-%if %length(&__exec_path.) = 0 %then %let __exec_path = %sysfunc(dequote(%sysget(SAS_EXECFILEPATH)));
+%if %length(&__exec_path.) = 0 %then %do;
+  %let __exec_path = %sysfunc(dequote(%sysget(SAS_EXECFILEPATH)));
+%end;
 
 /* Normalize slashes */
 %if %length(&__exec_path.) > 0 %then %let __exec_path = %sysfunc(translate(&__exec_path.,/,\));
@@ -51,8 +53,9 @@ options cmplib=(work.funcs);
 
 /* ---- 3. Secrets: read from environment, never hard-code ----------------- */
 %let anthropic_api_key = %get_env(ANTHROPIC_API_KEY);
-%if %length(&anthropic_api_key.) = 0 %then
+%if %length(&anthropic_api_key.) = 0 %then %do;
   %put WARNING: ANTHROPIC_API_KEY is not set. 02_call_claude programs will fail until it is exported in your environment.;
+%end;
 
 %let anthropic_api_url     = https://api.anthropic.com/v1/messages;
 %let anthropic_api_version = 2023-06-01;
