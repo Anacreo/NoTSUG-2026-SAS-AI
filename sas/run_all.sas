@@ -5,10 +5,13 @@
            stage can be run and inspected independently.
 ******************************************************************************/
 
-/* run_all.sas is stored in the sas/ project directory. Use a relative include
-   for the first stage so this file has no hard-coded user or repository path.
-   config.sas then establishes proj_root for all subsequent includes. */
-%include "00_setup/config.sas";
+/* Bootstrap config.sas from the current program's full path. SAS Studio sets
+   _SASPROGRAMFILE to the submitted file; unlike a relative %INCLUDE, this does
+   not depend on the server's current working directory. */
+%let __run_dir = %sysfunc(
+  prxchange(s#[/\\][^/\\]*$##,1,%superq(_SASPROGRAMFILE))
+);
+%include "&__run_dir./00_setup/config.sas";
 
 %include "&proj_root./01_generate_fake_data/generate_survey_data.sas";
 /* Optional model inventory step (uncomment when you need to verify IDs):
