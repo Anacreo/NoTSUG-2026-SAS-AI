@@ -1,15 +1,19 @@
 /******************************************************************************
  Program : macros.sas
  Purpose : Shared utility macros used across the project.
-******************************************************************************/
+ ******************************************************************************/
 
 /* %get_env(name, default)
    Reads an OS environment variable via SYSGET and returns a default value
    when the variable is not set. Used so API keys/secrets are never
    hard-coded into the SAS programs. */
 %macro get_env(name, default=);
-  %local val;
-  %let val = %sysfunc(sysget(&name.));
+  %local __name val;
+  %let __name=%superq(name);
+
+  %if %length(&__name.) = 0 %then %let val=;
+  %else %let val = %sysfunc(sysget(&__name.));
+
   %if %length(&val.) = 0 %then %let val = &default.;
   &val.
 %mend get_env;

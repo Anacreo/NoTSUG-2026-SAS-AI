@@ -1,4 +1,4 @@
-/****************************************************************************
+/******************************************************************************
  Program : config.sas
  Purpose : Central configuration for the "Ad Frequency Perception" project.
            Run this program FIRST in every SAS Studio session (or %include
@@ -26,8 +26,10 @@
   %let __exec_path = %sysfunc(dequote(%sysget(SAS_EXECFILEPATH)));
 %end;
 
-/* Normalize slashes */
-%if %length(&__exec_path.) > 0 %then %let __exec_path = %sysfunc(translate(&__exec_path.,/,\));
+/* Normalize slashes: convert backslash -> slash safely */
+%if %length(&__exec_path.) > 0 %then %do;
+  %let __exec_path = %sysfunc(tranwrd(%superq(__exec_path),%str(\),/));
+%end;
 
 /* Derive .../sas from .../sas/00_setup/config.sas when path is available */
 %if %length(&__exec_path.) > 0 %then %do;
