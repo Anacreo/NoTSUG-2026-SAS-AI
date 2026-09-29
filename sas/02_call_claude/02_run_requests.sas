@@ -5,7 +5,9 @@
  Usage:
    - Run 01_prepare_requests.sas first.
    - Set batch_size below to control how much output is produced per run.
-   - Rerun this file to continue processing PENDING requests.
+     It defaults to 200 so a full demo run (well under 200 requests) drains
+     the queue in a single pass; raise it further if you generate more data.
+   - Rerun this file to continue processing any remaining PENDING requests.
    - No survey text is passed through macro parameters; it remains in SAS
      data rows, avoiding commas/quotes/ampersands breaking macro parsing.
  ******************************************************************************/
@@ -13,8 +15,8 @@
 %assert_lib_exists(proj);
 %include "&proj_root./02_call_claude/claude_prompt_template.sas";
 
-%let batch_size = 5;
-%let claude_max_tokens = 200;
+%let batch_size = 200;
+%let claude_max_tokens = 500;
 
 proc sql noprint outobs=&batch_size.;
   create table work.batch as
