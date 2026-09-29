@@ -11,6 +11,8 @@
    - PROJ.ANTHROPIC_MODELS contains normalized model rows when the JSON
      response includes an auto-mapped table with an ID column.
    - The JSON engine's discovered tables and columns are printed for diagnosis.
+   - Each discovered model_id / display_name is also written to the LOG via
+     %put so the enumeration is visible without switching to the Results tab.
  ******************************************************************************/
 
 %assert_lib_exists(proj);
@@ -116,6 +118,17 @@ data proj.anthropic_models;
 run;
 
 libname mdljson clear;
+
+/* Write the enumeration straight to the log, not just the Results tab. */
+data _null_;
+  set proj.anthropic_models end=last;
+  if _n_=1 then put "NOTE: ---- Anthropic model enumeration begin ----";
+  put "NOTE: model_id=" model_id +(-1) " display_name=" display_name
+      +(-1) " type=" model_type +(-1) " created_at=" created_at;
+  if last then do;
+    put "NOTE: ---- Anthropic model enumeration end (" _n_ " models) ----";
+  end;
+run;
 
 title 'Available Anthropic Models (from /v1/models)';
 proc print data=proj.anthropic_models noobs;
