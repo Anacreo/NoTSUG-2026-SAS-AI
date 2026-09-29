@@ -1,14 +1,14 @@
 /******************************************************************************
- Program : config.sas
- Purpose : Central configuration for the "Ad Frequency Perception" project.
-            Run this program FIRST in every SAS Studio session (or %include
-            it from run_all.sas). It:
-              1. Resolves project folders and assigns the PROJ library.
-              2. Reads the Anthropic API key from an external key file (path
-                 supplied via autoexec.sas), falling back to an environment
-                 variable - never hard-code secrets in the code.
-              3. Defines the list of Claude engines/models to evaluate.
-              4. Loads shared macros and the JSON-field FCMP function.
+ * Program : config.sas
+ * Purpose : Central configuration for the "Ad Frequency Perception" project.
+ *           Run this program FIRST in every SAS Studio session (or %include
+ *           it from run_all.sas). It:
+ *             1. Resolves project folders and assigns the PROJ library.
+ *             2. Reads the Anthropic API key from an external key file (path
+ *                supplied via autoexec.sas), falling back to an environment
+ *                variable - never hard-code secrets in the code.
+ *             3. Defines the list of Claude engines/models to evaluate.
+ *             4. Loads shared macros and the JSON-field FCMP function.
  ******************************************************************************/
 
 /* ---- 1. Resolve project root & folders ---------------------------------- */
@@ -56,7 +56,7 @@ options cmplib=(work.funcs);
 %end;
 
 %if %length(&anthropic_api_key.) = 0 %then %do;
-  %put WARNING: ANTHROPIC_API_KEY could not be resolved. Point &anthropic_key_file. at a key file in autoexec.sas, or export the ANTHROPIC_API_KEY environment variable. 02_call_claude programs will fail until it is available.;
+  %put WARNING: ANTHROPIC_API_KEY could not be resolved. Point &anthropic_key_file. at a key file in autoexec.sas, or export the ANTHROPIC_API_KEY environment variable. 02_call_claude programs will fail until one is set.;
 %end;
 
 %let anthropic_api_url     = https://api.anthropic.com/v1/messages;
