@@ -5,28 +5,14 @@
            stage can be run and inspected independently.
 ******************************************************************************/
 
-/* Bootstrap config.sas from the location of this program. Do not depend on
-   proj_root here because an autoexec or prior session may define it incorrectly. */
+/* Bootstrap config.sas from the directory containing this program.
+   Keep this in open code: SAS Studio does not support open-code %IF/%DO/%END
+   in all execution contexts. _SASPROGRAMFILE is supplied by SAS Studio when
+   this program is submitted. */
 %let __run_path = %sysfunc(dequote(%superq(_SASPROGRAMFILE)));
+%let __run_dir  = %sysfunc(prxchange(s#[/\\][^/\\]*$##,1,%superq(__run_path)));
 
-%if %length(&__run_path.) = 0 %then %do;
-  %let __run_path = %sysfunc(dequote(%sysget(SAS_EXECFILEPATH)));
-%end;
-
-%if %length(&__run_path.) > 0 %then %do;
-  %let __run_path = %sysfunc(tranwrd(%superq(__run_path),%str(\),/));
-  %let __run_dir = %substr(
-    &__run_path.,
-    1,
-    %eval(%length(&__run_path.) - %length(%scan(&__run_path., -1, /)) - 1)
-  );
-
-  %include "&__run_dir./00_setup/config.sas";
-%end;
-%else %do;
-  /* Fallback for sessions where SAS does not expose the executing file path. */
-  %include "/home/&sysuserid./NoTSUG-2026-SAS-AI/sas/00_setup/config.sas";
-%end;
+%include "&__run_dir./00_setup/config.sas";
 
 %include "&proj_root./01_generate_fake_data/generate_survey_data.sas";
 /* Optional model inventory step (uncomment when you need to verify IDs):
