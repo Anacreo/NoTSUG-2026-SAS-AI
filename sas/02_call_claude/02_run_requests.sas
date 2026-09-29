@@ -124,8 +124,12 @@ quit;
   %end;
 %mend run_batch;
 
-%if &batch_count. > 0 %then %run_batch;
-%else %put NOTE: No PENDING requests remain in PROJ.CLAUDE_REQUESTS.;
+%if &batch_count. > 0 %then %do;
+  %run_batch;
+%end;
+%else %do;
+  %put NOTE: No PENDING requests remain in PROJ.CLAUDE_REQUESTS.;
+%end;
 
 proc sql;
   select status, count(*) as requests
