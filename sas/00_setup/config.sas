@@ -1,15 +1,15 @@
 /******************************************************************************
  Program : config.sas
  Purpose : Central configuration for the "Ad Frequency Perception" project.
-           Run this program FIRST in every SAS Studio session (or %include
-           it from run_all.sas). It:
-             1. Resolves project folders and assigns the PROJ library.
-             2. Reads the Anthropic API key from an external key file (path
-                supplied via autoexec.sas), falling back to an environment
-                variable - never hard-code secrets in the code.
-             3. Defines the list of Claude engines/models to evaluate.
-             4. Loads shared macros and the JSON-field FCMP function.
- ****************************************************************************/
+            Run this program FIRST in every SAS Studio session (or %include
+            it from run_all.sas). It:
+              1. Resolves project folders and assigns the PROJ library.
+              2. Reads the Anthropic API key from an external key file (path
+                 supplied via autoexec.sas), falling back to an environment
+                 variable - never hard-code secrets in the code.
+              3. Defines the list of Claude engines/models to evaluate.
+              4. Loads shared macros and the JSON-field FCMP function.
+ ******************************************************************************/
 
 /* ---- 1. Resolve project root & folders ---------------------------------- */
 %let __exec_path = %sysfunc(dequote(%superq(_SASPROGRAMFILE)));
@@ -56,24 +56,30 @@ options cmplib=(work.funcs);
 %end;
 
 %if %length(&anthropic_api_key.) = 0 %then %do;
-  %put WARNING: ANTHROPIC_API_KEY could not be resolved. Point &anthropic_key_file. at a key file in autoexec.sas, or export the ANTHROPIC_API_KEY environment variable. 02_call_claude programs will fail until then.;
+  %put WARNING: ANTHROPIC_API_KEY could not be resolved. Point &anthropic_key_file. at a key file in autoexec.sas, or export the ANTHROPIC_API_KEY environment variable. 02_call_claude programs will fail until it is available.;
 %end;
 
 %let anthropic_api_url     = https://api.anthropic.com/v1/messages;
 %let anthropic_api_version = 2023-06-01;
 
 /* ---- 4. Claude engines to compare --------------------------------------- */
+/* Selected from the models returned by /v1/models:
+     Haiku 4.5  = fast/low-cost baseline
+     Sonnet 5   = balanced quality/speed reference
+     Opus 5.5   = highest-capability reference
+*/
 data proj.claude_engines;
   length engine_id $40 engine_label $60;
   input engine_id $ engine_label & $60.;
   datalines;
-claude-3-haiku-20240307     Claude 3 Haiku (fast, low cost)
-claude-3-5-sonnet-20240620  Claude 3.5 Sonnet (balanced)
-claude-3-opus-20240229      Claude 3 Opus (highest quality)
+claude-haiku-4-5-20251001 Claude Haiku 4.5 (fast, low cost)
+claude-sonnet-5           Claude Sonnet 5 (balanced)
+claude-opus-5-5           Claude Opus 5.5 (highest capability)
 ;
 run;
 
-%put NOTE: Project root     = &proj_root.;
-%put NOTE: Data directory   = &data_dir.;
-%put NOTE: Output directory = &output_dir.;
+%put NOTE: Project root       = &proj_root.;
+%put NOTE: Data directory     = &data_dir.;
+%put NOTE: Output directory   = &output_dir.;
 %put NOTE: Anthropic key file = &anthropic_key_file.;
+%put NOTE: Claude engine set  = Haiku 4.5, Sonnet 5, Opus 5.5.;
