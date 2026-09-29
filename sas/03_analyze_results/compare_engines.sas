@@ -7,10 +7,10 @@
            reliability_score actually tracks its accuracy.
 
  Requires : proj.claude_results has been produced by
-            02_call_claude/call_claude_api.sas.
- Output   : proj.engine_scorecard, printed report, and a bar chart comparing
+            02_call_claude/03_parse_requests.sas.
+ Output   : proj.engine_scorecard, printed reports, and a bar chart comparing
             accuracy vs. average reliability score per engine.
-******************************************************************************/
+ ******************************************************************************/
 
 %assert_lib_exists(proj);
 
@@ -30,8 +30,18 @@ data work.scored;
   set proj.claude_results;
   true_rank     = input(true_bucket, bucket_rank.);
   decision_rank = input(decision, bucket_rank.);
-  correct       = (upcase(decision) = upcase(true_bucket));
-  abs_rank_diff = abs(true_rank - decision_rank);
+
+  /* Keep malformed/unmapped decisions visible, but do not treat them as an
+     incorrect bucket or generate missing-value arithmetic warnings. */
+  parse_error = missing(true_rank) or missing(decision_rank);
+  if parse_error then do;
+    correct       = .;
+    abs_rank_diff = .;
+  end;
+  else do;
+    correct       = (upcase(decision) = upcase(true_bucket));
+    abs_rank_diff = abs(true_rank - decision_rank);
+  end;
 run;
 
 /* ---- Per-engine scorecard: accuracy, average reliability, calibration -- */
@@ -39,15 +49,19 @@ proc sql;
   create table proj.engine_scorecard as
   select
     engine_label,
-    count(*)                                   as n_scored,
-    mean(correct)                               as accuracy       format=percent8.1,
-    mean(reliability_score)                     as avg_reliability format=6.2,
-    mean(abs_rank_diff)                         as avg_bucket_miss format=6.2,
+    count(*)                                      as n_responses,
+    sum(not missing(correct))                     as n_scored,
+    sum(parse_error)                              as n_parse_errors,
+    mean(correct)                                 as accuracy       format=percent8.1,
+    mean(reliability_score)                       as avg_reliability format=6.2,
+    mean(abs_rank_diff)                           as avg_bucket_miss format=6.2,
     /* Calibration: correlation between an engine's own confidence and
        whether it was actually right. A well-calibrated engine should show
        higher reliability_score on responses it got correct. */
-    mean(case when correct = 1 then reliability_score end) as avg_reliability_when_correct format=6.2,
-    mean(case when correct = 0 then reliability_score end) as avg_reliability_when_wrong   format=6.2
+    mean(case when correct = 1 then reliability_score end)
+                                                   as avg_reliability_when_correct format=6.2,
+    mean(case when correct = 0 then reliability_score end)
+                                                   as avg_reliability_when_wrong   format=6.2
   from work.scored
   group by engine_label
   order by calculated accuracy desc;
@@ -56,7 +70,9 @@ quit;
 title "Claude Engine Scorecard: Ad-Frequency Perception Task";
 proc print data=proj.engine_scorecard noobs label;
   label engine_label                   = "Engine"
-        n_scored                      = "N Responses Scored"
+        n_responses                    = "N Responses"
+        n_scored                       = "N Validly Scored"
+        n_parse_errors                 = "N Parse/Mapping Errors"
         accuracy                      = "Accuracy vs True Bucket"
         avg_reliability               = "Avg Reliability Score"
         avg_bucket_miss               = "Avg |Bucket| Miss (0=perfect)"
@@ -65,15 +81,47 @@ proc print data=proj.engine_scorecard noobs label;
 run;
 title;
 
-/* ---- Confusion matrix per engine: where does each engine get confused? */
-proc freq data=work.scored;
+/* ---- Explicit parse/unmapped-decision report ---------------------------- */
+proc sql;
+  create table work.parse_error_summary as
+  select engine_label,
+         sum(parse_error) as n_parse_errors,
+         count(*) as n_responses
+  from work.scored
+  group by engine_label
+  order by engine_label;
+quit;
+
+title "Parse/Mapping Errors by Claude Engine";
+proc print data=work.parse_error_summary noobs label;
+  label engine_label   = "Engine"
+        n_parse_errors = "Parse/Mapping Errors"
+        n_responses    = "N Responses";
+run;
+title;
+
+/* Print the malformed/unmapped decisions themselves for diagnosis. */
+title "Rows with Unmapped or Malformed Decisions";
+proc print data=work.scored(where=(parse_error=1)) noobs;
+  var engine_label respondent_id true_bucket decision reliability_score raw_response;
+run;
+title;
+
+/* ---- Confusion matrix per engine: where does each engine get confused? --- */
+/* PROC FREQ with BY requires sorted input. Exclude malformed decisions from
+   the matrix; they are reported separately above. */
+proc sort data=work.scored out=work.scored_by_engine;
+  by engine_label;
+run;
+
+proc freq data=work.scored_by_engine(where=(parse_error=0));
   by engine_label;
   tables true_bucket * decision / norow nocol nopercent;
   title "Confusion Matrix: True Bucket vs Claude Decision, by Engine";
 run;
 title;
 
-/* ---- Visual comparison: accuracy vs. average reliability per engine --- */
+/* ---- Visual comparison: accuracy vs. average reliability per engine ----- */
 data work.scorecard_long;
   set proj.engine_scorecard;
   length metric $ 20;
