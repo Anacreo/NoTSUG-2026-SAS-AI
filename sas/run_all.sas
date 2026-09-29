@@ -5,14 +5,10 @@
            stage can be run and inspected independently.
 ******************************************************************************/
 
-/* Bootstrap config.sas from the directory containing this program.
-   Keep this in open code: SAS Studio does not support open-code %IF/%DO/%END
-   in all execution contexts. _SASPROGRAMFILE is supplied by SAS Studio when
-   this program is submitted. */
-%let __run_path = %sysfunc(dequote(%superq(_SASPROGRAMFILE)));
-%let __run_dir  = %sysfunc(prxchange(s#[/\\][^/\\]*$##,1,%superq(__run_path)));
-
-%include "&__run_dir./00_setup/config.sas";
+/* run_all.sas is stored in the sas/ project directory. Use a relative include
+   for the first stage so this file has no hard-coded user or repository path.
+   config.sas then establishes proj_root for all subsequent includes. */
+%include "00_setup/config.sas";
 
 %include "&proj_root./01_generate_fake_data/generate_survey_data.sas";
 /* Optional model inventory step (uncomment when you need to verify IDs):
