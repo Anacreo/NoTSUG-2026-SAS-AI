@@ -13,7 +13,4 @@
 %include "&proj_root./02_call_claude/01_prepare_requests.sas";
 %include "&proj_root./02_call_claude/02_run_requests.sas";
 %include "&proj_root./02_call_claude/03_parse_requests.sas";
-%include "&proj_root./03_analyze_results/01_compare_engines.sas";
-%include "&proj_root./03_analyze_results/02_question_by_engine.sas";
-%include "&proj_root./03_analyze_results/03_cost_by_request.sas";
-%include "&proj_root./03_analyze_results/04_statistical_tests.sas";
+%include "&proj_root./03_analyze_results/compare_engines.sas";
