@@ -4,15 +4,28 @@
            Run this program FIRST in every SAS Studio session (or %include
            it from run_all.sas). It:
              1. Resolves project folders and assigns the PROJ library.
-             2. Reads the Anthropic API key from an environment variable
-                (never hard-code secrets in the code).
+             2. Reads the Anthropic API key from an external key file (path
+                supplied via autoexec.sas), falling back to an environment
+                variable - never hard-code secrets in the code.
              3. Defines the list of Claude engines/models to evaluate.
              4. Loads shared macros and the JSON-field FCMP function.
 
- Setup in SAS Studio:
-   - Before running, set an environment variable (or SAS Studio "Manage
-     Environment Variables") named ANTHROPIC_API_KEY with your API key.
-   - If automatic path detection fails, set &proj_root manually below.
+ Setup in SAS Studio (one-time, per environment):
+   - Store your Anthropic API key in a file OUTSIDE of this repo, e.g.
+       /home/<you>/SSHKeys/Anthropic.key
+     Only the FIRST line of that file is read as the key; anything else
+     in the file is ignored, so you're free to leave notes below it.
+   - In SAS Studio, open "Autoexec File" (gear/File menu -> Edit Autoexec
+     File) and add a line pointing at your key file, e.g.:
+       %global anthropic_key_file;
+       %let anthropic_key_file = /home/<you>/SSHKeys/Anthropic.key;
+     This keeps the secret path out of the repo entirely - config.sas just
+     reads whatever &anthropic_key_file. resolves to at run time.
+   - If autoexec.sas doesn't define anthropic_key_file (or the file can't
+     be read), config.sas falls back to the ANTHROPIC_API_KEY environment
+     variable (SAS Studio "Manage Environment Variables").
+   - If automatic project-path detection fails, set &proj_root manually
+     below.
  ****************************************************************************/
 
 /* ---- 1. Resolve project root & folders ----------------------------------
@@ -53,10 +66,19 @@ libname proj "&data_dir.";
 %include "&proj_root./99_utils/extract_json.sas";
 options cmplib=(work.funcs);
 
-/* ---- 3. Secrets: read from environment, never hard-code ----------------- */
-%let anthropic_api_key = %get_env(ANTHROPIC_API_KEY);
+/* ---- 3. Secrets: external key file first, then environment variable -----
+   &anthropic_key_file. is expected to be defined in your SAS Studio
+   autoexec.sas (see header comment above) and point at a file that lives
+   outside of this repo. Only the first line of that file is read. */
+%global anthropic_key_file;
+%if not %symexist(anthropic_key_file) %then %do;
+  %let anthropic_key_file =;
+%end;
+
+%let anthropic_api_key = %read_key_file(&anthropic_key_file., default=%get_env(ANTHROPIC_API_KEY));
+
 %if %length(&anthropic_api_key.) = 0 %then %do;
-  %put WARNING: ANTHROPIC_API_KEY is not set. 02_call_claude programs will fail until it is exported in your environment.;
+  %put WARNING: ANTHROPIC_API_KEY could not be resolved. Point &anthropic_key_file. at a key file in autoexec.sas, or export the ANTHROPIC_API_KEY environment variable. 02_call_claude programs will fail until then.;
 %end;
 
 %let anthropic_api_url     = https://api.anthropic.com/v1/messages;
@@ -78,3 +100,4 @@ run;
 %put NOTE: Project root     = &proj_root.;
 %put NOTE: Data directory   = &data_dir.;
 %put NOTE: Output directory = &output_dir.;
+%put NOTE: Anthropic key file = &anthropic_key_file.;
