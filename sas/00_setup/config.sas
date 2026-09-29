@@ -12,6 +12,14 @@
  ******************************************************************************/
 
 /* ---- 1. Resolve project root & folders ---------------------------------- */
+/* NOTE: _SASPROGRAMFILE/SAS_EXECFILEPATH report the path of the TOP-LEVEL
+   submitted program, not this %included config.sas file. That means the
+   resolved path differs depending on how the project is launched:
+     - Running this file directly from 00_setup/         -> .../sas/00_setup/config.sas
+     - Running run_all.sas (which %includes this file)    -> .../sas/run_all.sas
+   Both live either directly in "sas/" (run_all.sas) or one level below it
+   (00_setup/config.sas), so we only strip the extra "00_setup" level when
+   that's actually where the executing program lives. */
 %let __exec_path = %sysfunc(dequote(%superq(_SASPROGRAMFILE)));
 %if %length(&__exec_path.) = 0 %then %do;
   %let __exec_path = %sysfunc(dequote(%sysget(SAS_EXECFILEPATH)));
@@ -22,8 +30,14 @@
 %end;
 
 %if %length(&__exec_path.) > 0 %then %do;
-  %let __this_dir  = %substr(&__exec_path., 1, %eval(%length(&__exec_path.) - %length(%scan(&__exec_path., -1, /)) - 1));
-  %let proj_root   = %substr(&__this_dir.,  1, %eval(%length(&__this_dir.)  - %length(%scan(&__this_dir.,  -1, /)) - 1));
+  %let __this_dir    = %substr(&__exec_path., 1, %eval(%length(&__exec_path.) - %length(%scan(&__exec_path., -1, /)) - 1));
+  %let __last_folder = %scan(&__this_dir., -1, /);
+  %if %upcase(&__last_folder.) = 00_SETUP %then %do;
+    %let proj_root = %substr(&__this_dir., 1, %eval(%length(&__this_dir.) - %length(&__last_folder.) - 1));
+  %end;
+  %else %do;
+    %let proj_root = &__this_dir.;
+  %end;
 %end;
 %else %do;
   %let proj_root = /home/&sysuserid./NoTSUG-2026-SAS-AI/sas;
