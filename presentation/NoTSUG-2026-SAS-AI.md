@@ -2,11 +2,11 @@
 marp: true
 theme: default
 paginate: true
-title: SAS + AI - Calling Claude from SAS, Comparing Engine Cost, GitHub to SAS Studio
+title: Teach SAS to Read Minds
 ---
 
-# SAS + AI
-## Calling an LLM from SAS, comparing engines and cost, and building SAS code in GitHub
+# Teach SAS to Read Minds
+## Claude, PROC HTTP, and a Price Tag: which AI engine is worth the tokens, and how GitHub ships it to SAS Studio
 
 North Texas SAS User Group (NoTSUG) 2026
 Repo: github.com/Anacreo/NoTSUG-2026-SAS-AI
