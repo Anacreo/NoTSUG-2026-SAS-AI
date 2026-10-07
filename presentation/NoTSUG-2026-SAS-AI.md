@@ -2,221 +2,265 @@
 marp: true
 theme: default
 paginate: true
-title: SAS + AI - LLMs from SAS, Engine Costs, and GitHub-to-SAS Studio
+title: SAS + AI - Calling Claude from SAS, Comparing Engine Cost, GitHub to SAS Studio
 ---
 
 # SAS + AI
-## Calling LLMs from SAS, comparing engine costs, and shipping code from GitHub to SAS Studio
+## Calling an LLM from SAS, comparing engines and cost, and building SAS code in GitHub
 
 North Texas SAS User Group (NoTSUG) 2026
+Repo: github.com/Anacreo/NoTSUG-2026-SAS-AI
 
 ---
 
 # Agenda
-1. Why LLMs inside SAS
-2. Calling an LLM API with PROC HTTP
-3. Parsing responses (JSON libname)
-4. Comparing engines and costing
-5. GitHub as the build pipeline for SAS code
-6. Feeding SAS Studio
-7. Governance, security, pitfalls
-8. Demo and Q&A
+1. The problem: free text SAS can't quantify
+2. Project structure (`sas/`)
+3. Calling the LLM with `PROC HTTP`
+4. Parsing responses
+5. Comparing engines: accuracy, calibration, **cost**
+6. GitHub building the code and feeding SAS Studio
+7. Lessons and Q&A
+
+*Every slide shows code exactly as it exists in the repo.*
 
 ---
 
-# Why LLMs inside SAS?
-- Generate / explain / document SAS code
-- Classify and summarize text data in-place
-- Keep data, logs and results inside existing SAS workflows
-- No new platform: just HTTPS + JSON
+# The problem
+Survey question: *"How often does this advertisement appeal to you?"*
+
+- "every once in a while it catches my eye"
+- "it appeals to me every single time"
+
+`PROC FREQ` counts values; it can't read language.
+
+**Goal:** have Claude classify each answer into Never / Rarely / Sometimes / Often / Always, plus its own `reliability_score` (0-1).
 
 ---
 
-# Architecture
+# Why this test is measurable
+`01_generate_fake_data/generate_survey_data.sas`
+
+- Fake respondents drawn from a hidden `true_bucket`
+- Multiple natural-language phrasings per bucket
+- Output: `proj.survey_responses`
+
+So we can score every engine's **accuracy** and check whether its **confidence is calibrated**.
+
+---
+
+# Project layout
 ```
-SAS Studio  --PROC HTTP-->  LLM API (OpenAI / Anthropic / Gemini / ...)
-    ^                              |
-    | %include / git pull          v
- GitHub repo  <--- Copilot / PR ---  generated SAS code
+sas/
+  00_setup/               config.sas (paths, key, engine list)
+  01_generate_fake_data/  generate_survey_data.sas
+  02_call_claude/         prompt template + PROC HTTP calls
+  03_analyze_results/     accuracy, per-question, cost, stats
+  99_utils/               macros.sas, extract_json.sas
+  run_all.sas             full pipeline driver
 ```
 
 ---
 
-# Part 1: The API call from SAS
-- Build JSON request body in a temp fileref
-- `PROC HTTP` with `method="POST"`, `in=`, `out=`
-- Headers: `Authorization`, `Content-Type`
-- Check `&SYS_PROCHTTP_STATUS_CODE`
-- Code: `sas/01_llm_call.sas`
-
----
-
-# Request example
+# Pipeline (`run_all.sas`)
 ```sas
-proc http url="https://api.openai.com/v1/chat/completions"
-          method="POST" in=req out=resp;
-  headers "Authorization"="******"
-          "Content-Type"="application/json";
+%include "&code_root.00_setup/config.sas";
+%include "&code_root.01_generate_fake_data/generate_survey_data.sas";
+%include "&code_root.02_call_claude/01_prepare_requests.sas";
+%include "&code_root.02_call_claude/02_run_requests.sas";
+%include "&code_root.02_call_claude/03_parse_requests.sas";
+%include "&code_root.03_analyze_results/01_compare_engines.sas";
+%include "&code_root.03_analyze_results/02_question_by_engine.sas";
+%include "&code_root.03_analyze_results/03_cost_by_request.sas";
+%include "&code_root.03_analyze_results/04_statistical_tests.sas";
+```
+Prepare, run, and parse are separate so each stage can be inspected and rerun.
+
+---
+
+# Secrets (`config.sas`)
+- Key read from an external key file (path set in `autoexec.sas`)
+- Falls back to the `ANTHROPIC_API_KEY` environment variable
+- Never hard-coded
+```sas
+%let anthropic_api_url     = https://api.anthropic.com/v1/messages;
+%let anthropic_api_version = 2023-06-01;
+```
+
+---
+
+# Engines compared (`config.sas`)
+```sas
+data proj.claude_engines;
+  ...
+  datalines;
+claude-haiku-4-5-20251001 Claude Haiku 4.5 (fast, low cost)
+claude-sonnet-5           Claude Sonnet 5 (balanced)
+claude-opus-5-5           Claude Opus 5.5 (highest capability)
+;
+```
+Add an engine = add one row.
+`00_list_models.sas` calls `GET /v1/models` to verify IDs your key can access.
+
+---
+
+# The prompt (`claude_prompt_template.sas`)
+- Prompt lives in its own file: tune and version it without touching API code
+- Role: careful market research analyst
+- Classify into exactly one of five buckets
+- Return `reliability_score` 0-1
+- Respond with ONLY a single-line flat JSON object:
+`{"decision": "...", "reliability_score": ...}`
+
+---
+
+# Step 1: build the request queue (`01_prepare_requests.sas`)
+```sas
+create table proj.claude_requests as
+select monotonic() as request_id, e.engine_id, ...
+       'PENDING' as status, ...
+from proj.claude_engines as e,
+     proj.survey_responses(obs=&max_responses.) as s;
+```
+- Cross join: every response x every engine
+- Queue is a SAS table: inspect it before spending money
+
+---
+
+# Step 2: the API call (`02_run_requests.sas`)
+```sas
+proc http method='POST' url="&anthropic_api_url."
+  in=reqbody out=resp;
+  headers
+    'x-api-key'="&anthropic_api_key."
+    'anthropic-version'="&anthropic_api_version."
+    'content-type'='application/json';
 run;
+%let http_status=&SYS_PROCHTTP_STATUS_CODE.;
 ```
-- `temperature=0` for repeatable code generation
-- Key from environment variable, never in code or logs
+- Body built in a `data _null_` step, JSON-escaped (backslash first, then quotes, then newlines)
+- Survey text stays in data rows, **not macro parameters**, so commas/quotes/ampersands can't break macro parsing
 
 ---
 
-# Parsing the response
+# Bounded, restartable batches
+- `batch_size = 200`, `claude_max_tokens = 500`
+- Selects only `status='PENDING'`
+- Each request logged to `proj.claude_http_log`
+- Queue row updated: `RECEIVED` or `ERROR`, with `http_status`, `raw_response`, `completed_at`
+- Rerun to continue where you left off
+
+---
+
+# Step 3: parse (`03_parse_requests.sas`)
+- Only `RECEIVED` rows are parsed
+- `PRXPARSE` pulls the model's text out of the response envelope
+- `json_field()` (FCMP in `99_utils/extract_json.sas`) extracts `decision` and `reliability_score`
+- Bad output becomes `PARSE_ERROR`, never a misleading result
+- HTTP errors stay visible in `proj.claude_requests`
+
+---
+
+# Comparing engines: accuracy
+`03_analyze_results/01_compare_engines.sas`
+
+- Scores each engine's decision vs. hidden `true_bucket`
+- Ordinal rank format (`bucket_rank`): Often vs Always is a smaller miss than Never vs Always
+- Does the self-reported `reliability_score` track real accuracy?
+- Output: `proj.engine_scorecard`, reports, accuracy vs. avg reliability bar chart
+
+`02_question_by_engine.sas`: one row per question, each engine's answer side by side.
+
+---
+
+# Statistical rigor (`04_statistical_tests.sas`)
+1. Cochran's Q: paired differences in accuracy across engines
+2. Brier score: calibration of stated confidence
+3. Reliability bins: stated confidence vs. observed accuracy
+4. `PROC FREQ AGREE`: weighted kappa for ordinal agreement
+
+Outputs: `proj.brier_scorecard`, `proj.reliability_bins`, `proj.cochran_q_result`
+
+---
+
+# Costing: what the API returns
+`03_cost_by_request.sas`
+
+- The API returns **tokens, not dollars**
+- Every response has a `usage` block: `input_tokens`, `output_tokens`, cache token fields
+- Extracted with the same `json_field()` helper
+- Cost = tokens x price per million tokens
+
+---
+
+# Costing: editable price table
 ```sas
-libname r json fileref=resp;
-proc datasets lib=r; quit;   /* explore tables */
+data proj.model_pricing;
+  ...
+claude-haiku-4-5-20251001 1  5
+claude-sonnet-5           2  10
+claude-opus-5-5           4  20
+;
 ```
-- Tables: `choices_message`, `usage`
-- `usage` gives prompt and completion tokens: the basis for costing
-- Log tokens per call to a SAS dataset for audit
+$ per 1,000,000 tokens (input, output). Per the code comments: checked 2026-09-29, re-verify before budgeting; estimate only (cache and batch pricing not modeled).
 
 ---
 
-# Practical tips
-- Use `%macro llm(prompt=, model=)` wrapper; one place to change engines
-- Escape quotes/newlines in prompts (`tranwrd`, or JSON functions in `proc json`)
-- Retry on 429/5xx with back-off
-- Review generated code before `%include`: never auto-execute
-
----
-
-# Part 2: Comparing engines
-Same prompt set, same SAS wrapper, different `model` / endpoint
-
-| Criteria | What to measure |
-|---|---|
-| Cost | $ per call, $ per month |
-| Quality | Does code run? Correct output? |
-| Latency | Seconds per call |
-| Limits | Context window, rate limits |
-| Data policy | Retention, region, enterprise terms |
-
----
-
-# Costing method
-Cost per call = (input tokens x input price + output tokens x output price) / 1,000,000
-
-- Prices are per million tokens, billed separately for input and output
-- Output tokens typically cost several times more than input
-- Capture real token counts from the `usage` table
-- Code: `sas/02_cost_compare.sas`
-
----
-
-# Example cost comparison (illustrative)
-1,200 input / 600 output tokens, 5,000 calls per month
-
-| Engine | Cost per call | Monthly |
-|---|---|---|
-| Gemini Flash-class | ~$0.0004 | ~$2 |
-| GPT-4o-mini-class | ~$0.0005 | ~$2.70 |
-| Claude Haiku-class | ~$0.0034 | ~$17 |
-| GPT-4o-class | ~$0.0090 | ~$45 |
-| Claude Sonnet-class | ~$0.0126 | ~$63 |
-
-**Placeholder prices: verify current vendor pricing before presenting.**
-
----
-
-# Cost levers
-- Smaller model for simple tasks, bigger model for hard ones (routing)
-- Trim prompt / context; send only needed columns and code
-- Prompt caching and batch APIs discounts
-- Cap `max_tokens`
-- Cache identical prompts in a SAS dataset
-
----
-
-# Beyond price: cost of being wrong
-- A cheap model that needs 3 retries or manual fixes isn't cheap
-- Score each engine: pass rate x cost per *successful* run
-- Build a small test harness in SAS: run prompt, run generated code, compare to expected output
-
----
-
-# Part 3: GitHub builds the SAS code
-- Repo holds SAS programs, macros, prompts, tests
-- Branch + pull request = review gate for AI-generated code
-- GitHub Copilot (agent / chat) drafts code and PRs
-- GitHub Actions can lint, run tests, and publish releases
-- History = audit trail of what AI produced and who approved it
-
----
-
-# Suggested repo layout
-```
-sas/            programs and macros
-prompts/        versioned prompt templates
-tests/          validation programs and expected output
-presentation/   this deck
-.github/        workflows
-```
-
----
-
-# Part 4: Feeding SAS Studio
-Option A: raw URL
+# Costing: the math in SAS
 ```sas
-filename gh url "https://raw.githubusercontent.com/<repo>/main/sas/prog.sas";
-%include gh;
+(u.billable_input_tokens  * p.input_price_per_mtok  / 1000000) as input_cost,
+(u.billable_output_tokens * p.output_price_per_mtok / 1000000) as output_cost,
+calculated input_cost + calculated output_cost as est_cost_usd
 ```
-Option B: git functions (SAS 9.4M6+ / Viya)
-```sas
-rc = gitfn_clone("https://github.com/<repo>.git", "/home/me/repo");
-```
-Option C: SAS Studio's built-in Git integration (Viya)
-Code: `sas/03_github_fetch.sas`
+Outputs:
+- `proj.claude_request_cost` (one row per request)
+- `proj.engine_cost_summary` (total and average per engine)
+- Review report for rows missing usage or pricing
 
 ---
 
-# Private repos and tokens
-- Use a fine-grained personal access token or deploy key, read-only
-- Store in a protected file / env var, not in programs
-- Pin to a tag or commit SHA in production, not `main`
+# Putting cost and accuracy together
+| Engine | Accuracy | Calibration | Est. cost |
+|---|---|---|---|
+| Haiku 4.5 | *from engine_scorecard* | *Brier* | *engine_cost_summary* |
+| Sonnet 5 | | | |
+| Opus 5.5 | | | |
+
+Live results from the demo run fill this in. The question: is the extra cost of a bigger engine buying accuracy on *this* task?
 
 ---
 
-# End-to-end workflow
-1. Prompt LLM (from SAS or Copilot) to draft code
-2. Commit to a branch, open a PR
-3. Review + automated checks
-4. Merge and tag
-5. SAS Studio pulls the tag and runs it
-6. Log tokens and cost per run
+# GitHub builds the SAS code
+- All SAS lives in the repo; GitHub Copilot agent branches/PRs built the scaffold, run_all fixes, and model updates
+- Branches seen in this repo: scaffolding, `update-run-all-sas`, `research-sas-code-warning`, `updates-from-sas-studio`
+- PR = review gate for AI-generated code; history = audit trail
 
 ---
 
-# Governance and security
-- Data leaving your network: mask PII, check vendor terms
-- Never commit keys; rotate if exposed
-- Human review of generated code
-- Keep SAS log of prompts, model, version, tokens
-- Prefer enterprise endpoints with no-training guarantees
+# GitHub feeds SAS Studio
+- Open the `sas/` folder as a SAS Studio project (or copy to Files)
+- Set `ANTHROPIC_API_KEY` or key file in `autoexec.sas`
+- Run `run_all.sas`
+- Edits made in SAS Studio flow back to GitHub (see the `updates-from-sas-studio` branch)
+
+Requires outbound HTTPS to `api.anthropic.com`.
 
 ---
 
-# Pitfalls
-- Hallucinated procs/options: validate in a sandbox
-- Model versions change behavior; pin versions
-- Rate limits and timeouts in batch jobs
-- SSL certificates / proxy settings for PROC HTTP
+# Lessons from the code
+- Keep the prompt in its own file
+- Split queue / execute / parse
+- Keep text in data, not macro variables
+- Fail visibly: `PARSE_ERROR`, `ERROR` status, missing-usage report
+- Models get retired (`model_update_note.sas`): keep the engine list in a table
+- Never commit keys
 
 ---
 
 # Demo
-1. Run `01_llm_call.sas` in SAS Studio
-2. Run `02_cost_compare.sas` and view ranking
-3. Pull `03_github_fetch.sas` from the repo
-
----
-
-# Takeaways
-- PROC HTTP + JSON libname is all you need
-- Measure tokens, compare engines on cost per *successful* result
-- GitHub gives review, history, and delivery for AI-written SAS
+1. `config.sas`: engines and key
+2. `01_prepare_requests.sas` then `02_run_requests.sas`
+3. `03_parse_requests.sas`
+4. Scorecard, per-question view, cost summary
 
 # Questions?
-Repo: github.com/Anacreo/NoTSUG-2026-SAS-AI
