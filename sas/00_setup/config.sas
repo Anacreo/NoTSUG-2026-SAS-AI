@@ -11,33 +11,16 @@
               4. Loads shared macros and the JSON-field FCMP function.
  ******************************************************************************/
 
-/* ---- 1. Resolve project root & folders ---------------------------------- */
-%let __exec_path = %sysfunc(dequote(%superq(_SASPROGRAMFILE)));
-%if %length(&__exec_path.) = 0 %then %do;
-  %let __exec_path = %sysfunc(dequote(%sysget(SAS_EXECFILEPATH)));
-%end;
-
-%if %length(&__exec_path.) > 0 %then %do;
-  %let __exec_path = %sysfunc(tranwrd(%superq(__exec_path),%str(\),/));
-%end;
-
-%if %length(&__exec_path.) > 0 %then %do;
-  %let __this_dir  = %substr(&__exec_path., 1, %eval(%length(&__exec_path.) - %length(%scan(&__exec_path., -1, /)) - 1));
-  %let proj_root   = %substr(&__this_dir.,  1, %eval(%length(&__this_dir.)  - %length(%scan(&__this_dir.,  -1, /)) - 1));
-%end;
-%else %do;
-  %let proj_root = /home/&sysuserid./NoTSUG-2026-SAS-AI/sas;
-%end;
-
 %let data_dir   = &proj_root./data;
 %let output_dir = &proj_root./output;
+%let code_root = &proj_root./sas;
 
 options dlcreatedir;
 libname proj "&data_dir.";
 
 /* ---- 2. Load shared macros & helper functions --------------------------- */
-%include "&proj_root./99_utils/macros.sas";
-%include "&proj_root./99_utils/extract_json.sas";
+%include "&code_root./99_utils/macros.sas";
+%include "&code_root./99_utils/extract_json.sas";
 options cmplib=(work.funcs);
 
 /* ---- 3. Secrets: external key file first, then environment variable ----- */

@@ -108,7 +108,8 @@ title;
 /* ---- 3. Cochran's Q test for paired accuracy --------------------------- */
 /* Create one row per respondent with one binary correctness value per model.
    Complete cases only are used because Cochran's Q requires every subject to
-   have a result from every condition. */nproc sql;
+   have a result from every condition. */
+proc sql;
   create table work.cochran_wide as
   select respondent_id,
          max(case when engine_key='HAIKU'  then correct end) as correct_haiku,
