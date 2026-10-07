@@ -43,4 +43,4 @@ sas/
 Outbound HTTPS access to `api.anthropic.com` is required for step 2.
 
 ## Presentation
-`presentation/NoTSUG-2026-SAS-AI.md` is the NoTSUG slide deck ([Marp](https://marp.app) markdown; export with `marp --pptx` or `--pdf`). It presents the code in `sas/` exactly as it exists in this repository.
+`presentation/NoTSUG-2026-SAS-AI.md` is the NoTSUG slide deck ([Marp](https://marp.app) markdown; a ready-made PowerPoint, `presentation/NoTSUG-2026-SAS-AI.pptx`, is generated from it; you can also export with `marp --pptx`). It presents the code in `sas/` exactly as it exists in this repository.
