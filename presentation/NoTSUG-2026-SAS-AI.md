@@ -114,6 +114,24 @@ Add an engine = add one row.
 
 ---
 
+# How the prompt turns words into numbers
+1. **Survey text** (a data row): "Every once in a while it catches my eye."
+2. **Prompt** (`claude_prompt_template.sas`): classify into Never / Rarely / Sometimes / Often / Always, add a `reliability_score` 0-1, reply with ONLY flat JSON
+3. **Claude replies:** `{"decision": "Rarely", "reliability_score": 0.9}`
+4. **SAS makes numbers:** `json_field()` pulls both fields; `bucket_rank` maps Rarely = 2
+
+| Respondent says | Bucket | Number (bucket_rank) |
+|---|---|---|
+| It never really grabs my attention. | Never | 1 |
+| Every once in a while it catches my eye. | Rarely | 2 |
+| About half the time I find it interesting. | Sometimes | 3 |
+| Most of the time it catches my attention. | Often | 4 |
+| It appeals to me every single time I see it. | Always | 5 |
+
+Phrases are from `generate_survey_data.sas`; the Bucket is the hidden `true_bucket` Claude must recover.
+
+---
+
 # Step 1: build the request queue (`01_prepare_requests.sas`)
 ```sas
 create table proj.claude_requests as
