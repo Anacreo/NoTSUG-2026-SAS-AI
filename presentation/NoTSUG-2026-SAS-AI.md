@@ -14,13 +14,13 @@ Repo: github.com/Anacreo/NoTSUG-2026-SAS-AI
 ---
 
 # Agenda
-1. The problem: free text SAS can't quantify
-2. Project structure (`sas/`)
-3. Calling the LLM with `PROC HTTP`
-4. Parsing responses
-5. Comparing engines: accuracy, calibration, **cost**
-6. GitHub building the code and feeding SAS Studio
-7. Lessons and Q&A
+1. The mind-reading problem: free text SAS can't quantify
+2. The setup: a SAS Studio project, built in GitHub
+3. Asking Claude: PROC HTTP calls from SAS
+4. Decoding the answer: parsing JSON back into data
+5. Which mind is worth the tokens? Accuracy, calibration, and cost
+6. From GitHub to SAS Studio: shipping the code
+7. Lessons learned and Q&A
 
 *Every slide shows code exactly as it exists in the repo.*
 
